@@ -11,7 +11,9 @@ from config import Config
 logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
-app.config.from_object('config')
+# Load configuration from the Config class (includes SECRET_KEY for sessions)
+app.config.from_object(Config)
+app.secret_key = Config.SECRET_KEY
 
 # Khởi tạo services
 pdf_service = PDFService()
