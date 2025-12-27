@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+
+{% block title %}Trang chủ - Hệ thống Hỏi đáp PDF{% endblock %}
+
+{% block content %}
+<div class="row g-2" style="position: relative;">
+    <div class="col-lg-7" id="leftPanel" style="position: relative;">
+        <!-- Form hỏi đáp -->
+        <div class="question-box" style="padding: 1.5rem;">
+            <h4><i class="fas fa-question-circle"></i> Hỏi đáp về tài liệu</h4>
+            <p class="small mb-3">Nhập câu hỏi và hệ thống sẽ tìm kiếm thông tin trong các tài liệu PDF</p>
+            
+            <form id="questionForm">
+                <div class="mb-2">
+                    <label for="question" class="form-label small">Câu hỏi của bạn:</label>
+                    <textarea class="form-control form-control-sm" id="question" rows="2" placeholder="Ví dụ: Tóm tắt nội dung chính của tài liệu..." required></textarea>
+                </div>
+                
+                <div class="mb-2">
+                    <label for="pdfSelect" class="form-label small">Tìm kiếm trong (tùy chọn):</label>
+                    <select class="form-select form-select-sm" id="pdfSelect">
+                        <option value="">Tất cả tài liệu</option>
+                        {% for pdf in pdfs %}
+                        <option value="{{ pdf.filename }}">{{ pdf.filename }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <button type="submit" class="btn btn-light btn-sm btn-search-hover w-100">
+                    <i class="fas fa-search"></i> Tìm kiếm
+                </button>
+            </form>
+        </div>
+
+        <!-- Kết quả tìm kiếm -->
+        <div id="loading" class="loading">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Đang tìm kiếm...</span>
+            </div>
+            <p class="mt-3">Đang tìm kiếm thông tin...</p>
+        </div>
+
+        <div id="answerResult" style="display: none;">
+            <div class="answer-box">
+                <h4><i class="fas fa-robot"></i> Câu trả lời</h4>
+                <div id="answerText"></div>
+                
+                <div id="sourcesSection" style="display: none;">
+                    <h5 class="mt-4"><i class="fas fa-map-marker-alt"></i> Nguồn tham khảo</h5>
+                    <div id="sourcesList"></div>
+                </div>
+            </div>
+        </div>
+
+        {% if error %}
+        <div class="alert alert-danger">
+            <i class="fas fa-exclamation-triangle"></i> {{ error }}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Resizer bar -->
+    <div id="resizer" style="width: 5px; background: #ddd; cursor: col-resize; position: absolute; top: 0; bottom: 0; left: 58.33%; transform: translateX(-50%); z-index: 10; user-select: none; transition: background 0.2s;"></div>
+    
+    <div class="col-lg-5" id="rightPanel" style="position: relative;">
+        <!-- Danh sách PDF files -->
+        <div class="card" id="fileListCard">
+            <div class="card-header bg-primary text-white">
+                <h5><i class="fas fa-download"></i> Tin tức </h5>
+            </div>
+            <div class="card-body" id="fileListBody">
+                <!-- Thanh tìm kiếm file -->
+                <div class="mb-3" style="grid-column: 1 / -1;">
+                    <input id="fileSearch" type="text" class="form-control" placeholder="Tìm file theo tên hoặc mô tả...">
+                </div>
+                {% if pdfs %}
+                    <!-- Hiển thị tất cả file -->
+                    <div id="recentFiles" style="display: contents;">
+                        {% for pdf in pdfs %}
+                        <div class="pdf-card card">
+                            <div class="card-body">
+                                <h6 class="card-title">
+                                    <i class="fas fa-file-pdf text-danger"></i>
+                                    {{ pdf.filename }}
+                                </h6>
+                                {% if pdf.caption %}
+                                <p class="card-text small caption-text" style="color: #000055;" data-full="{{ pdf.caption|e }}">
+                                    <i class="fas fa-comment"></i>
+                                </p>
+                                {% endif %}
+                                <p class="card-text text-muted small">
+                                    <i class="fas fa-weight"></i> {{ "%.1f"|format(pdf.file_size / 1024 / 1024) }} MB<br>
+                                    <i class="fas fa-calendar"></i> {{ pdf.created_at.strftime('%d/%m/%Y') }}
+                                </p>
+                                <div class="text-center">
+                                    <div class="btn-group w-100" role="group">
+                                        <button onclick="showPdfInPanel('{{ url_for('view_pdf_file', filename=pdf.filename) }}', '{{ pdf.filename }}')" 
+                                                class="btn btn-primary btn-sm" title="Xem PDF">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <a href="{{ url_for('download_pdf', filename=pdf.filename) }}" 
+                                           class="btn btn-success btn-sm" title="Tải xuống">
+                                            <i class="fas fa-download"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted text-center" style="grid-column: 1 / -1;">
+                        <i class="fas fa-inbox fa-2x mb-3"></i><br>
+                        Chưa có tài liệu nào được upload
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // Xử lý nút "Xem tất cả"
+
+    $('#questionForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const question = $('#question').val().trim();
+        const filename = $('#pdfSelect').val();
+        
+        if (!question) {
+            alert('Vui lòng nhập câu hỏi');
+            return;
+        }
+        
+        // Hiển thị loading
+        $('#loading').show();
+        $('#answerResult').hide();
+        
+        // Gửi request
+        $.ajax({
+            url: '/ask',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                question: question,
+                filename: filename
+            }),
+            success: function(response) {
+                $('#loading').hide();
+                
+                if (response.success) {
+                    $('#answerText').html(response.answer.replace(/\n/g, '<br>'));
+                    
+                    // Hiển thị sources (gộp trang theo file)
+                    if (response.sources && response.sources.length > 0) {
+                        $('#sourcesList').empty();
+
+                        const grouped = {};
+                        response.sources.forEach(function(source) {
+                            if (!grouped[source.filename]) {
+                                grouped[source.filename] = [];
+                            }
+                            if (!grouped[source.filename].includes(source.page_number)) {
+                                grouped[source.filename].push(source.page_number);
+                            }
+                        });
+
+                        Object.keys(grouped).forEach(function(filename) {
+                            const pages = grouped[filename].sort((a, b) => a - b);
+                            const sourceHtml = `
+                                <div class="source-link">
+                                    <strong>${filename}</strong> - Trang ${pages.join(', Trang ')}
+                                </div>
+                            `;
+                            $('#sourcesList').append(sourceHtml);
+                        });
+
+                        $('#sourcesSection').show();
+                    } else {
+                        $('#sourcesSection').hide();
+                    }
+                    
+                    $('#answerResult').show();
+                } else {
+                    alert('Lỗi: ' + response.message);
+                }
+            },
+            error: function() {
+                $('#loading').hide();
+                alert('Có lỗi xảy ra khi gửi câu hỏi');
+            }
+        });
+    });
+
+    // Tìm kiếm theo tên/caption (bao gồm cả các file đang ẩn)
+    $('#fileSearch').on('input', function() {
+        const q = $(this).val().toLowerCase();
+        const filterCard = function(card) {
+            const title = $(card).find('.card-title').text().toLowerCase();
+            const caption = $(card).find('.card-text.small').text().toLowerCase();
+            return title.includes(q) || caption.includes(q);
+        };
+
+        // Áp dụng lọc cho tất cả file
+        $('#recentFiles .pdf-card').each(function() {
+            $(this).toggle(filterCard(this));
+        });
+    });
+
+    // Rút gọn caption n từ + nút Xem thêm/Thu gọn
+    function truncateWords(text, limit) {
+        const words = text.trim().split(/\s+/);
+        if (words.length <= limit) return { short: text, truncated: false };
+        return { short: words.slice(0, limit).join(' ') + '...', truncated: true };
+    }
+    $('.caption-text').each(function() {
+        const full = $(this).data('full');
+        if (!full) return;
+        const t = truncateWords(full, 30);
+        const content = `<i class="fas fa-comment"></i> ${t.short}` + (t.truncated ? ` <a href="#" class="toggle-caption">Xem thêm</a>` : '');
+        $(this).html(content);
+        if (t.truncated) {
+            $(this).data('short', t.short);
+            $(this).data('expanded', false);
+        }
+    });
+    $(document).on('click', '.toggle-caption', function(e){
+        e.preventDefault();
+        const p = $(this).closest('.caption-text');
+        const expanded = p.data('expanded');
+        const full = p.data('full');
+        const short = p.data('short');
+        if (expanded) {
+            p.html(`<i class=\"fas fa-comment\"></i> ${short} <a href=\"#\" class=\"toggle-caption\">Xem thêm</a>`);
+        } else {
+            p.html(`<i class=\"fas fa-comment\"></i> ${full} <a href=\"#\" class=\"toggle-caption\">Thu gọn</a>`);
+        }
+        p.data('expanded', !expanded);
+    });
+});
+
+// Hàm hiển thị PDF trong panel bên phải
+function showPdfInPanel(pdfUrl, filename) {
+    // Tự động chọn file trong dropdown "Tìm kiếm trong"
+    $('#pdfSelect').val(filename);
+    
+    // Ẩn danh sách file
+    $('#fileListBody').hide();
+    
+    // Tạo hoặc hiển thị PDF viewer
+    let pdfViewer = $('#pdfViewerPanel');
+    if (pdfViewer.length === 0) {
+        // Tạo PDF viewer panel
+        pdfViewer = $(`
+            <div id="pdfViewerPanel" class="card-body p-0" style="height: calc(100vh - 180px);">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">
+                        <i class="fas fa-file-pdf"></i> <span id="pdfViewerFilename">${filename}</span>
+                    </h6>
+                    <div>
+                        <a id="pdfViewerDownload" href="${pdfUrl.replace('/view_pdf_file/', '/download/')}" 
+                           class="btn btn-light btn-sm me-2" download>
+                            <i class="fas fa-download"></i> Tải
+                        </a>
+                        <button onclick="hidePdfPanel()" class="btn btn-light btn-sm">
+                            <i class="fas fa-times"></i> Đóng
+                        </button>
+                    </div>
+                </div>
+                <iframe id="pdfViewerFrame" src="${pdfUrl}" 
+                        style="width: 100%; height: calc(100vh - 230px); border: none;"></iframe>
+            </div>
+        `);
+        $('#fileListCard').append(pdfViewer);
+    } else {
+        // Cập nhật PDF viewer
+        $('#pdfViewerFilename').text(filename);
+        $('#pdfViewerDownload').attr('href', pdfUrl.replace('/view_pdf_file/', '/download/'));
+        $('#pdfViewerFrame').attr('src', pdfUrl);
+        pdfViewer.show();
+    }
+}
+
+// Hàm ẩn PDF panel và hiện lại danh sách file
+function hidePdfPanel() {
+    // Reset dropdown về "Tất cả tài liệu"
+    $('#pdfSelect').val('');
+    
+    $('#pdfViewerPanel').hide();
+    $('#fileListBody').show();
+    // Xóa src của iframe để giải phóng bộ nhớ
+    $('#pdfViewerFrame').attr('src', '');
+}
+
+// Resizer functionality - cho phép kéo để điều chỉnh độ rộng 2 cột
+let isResizing = false;
+let startX = 0;
+let startLeftWidth = 0;
+let startRightWidth = 0;
+
+$('#resizer').on('mousedown', function(e) {
+    isResizing = true;
+    startX = e.pageX;
+    const leftPanel = $('#leftPanel');
+    const rightPanel = $('#rightPanel');
+    startLeftWidth = leftPanel.outerWidth();
+    startRightWidth = rightPanel.outerWidth();
+    $('body').css('cursor', 'col-resize');
+    $('body').css('user-select', 'none');
+    e.preventDefault();
+});
+
+$(document).on('mousemove', function(e) {
+    if (!isResizing) return;
+    
+    const deltaX = e.pageX - startX;
+    const container = $('.row').first();
+    const containerWidth = container.width();
+    
+    const newLeftWidth = startLeftWidth + deltaX;
+    const newRightWidth = startRightWidth - deltaX;
+    
+    // Giới hạn độ rộng tối thiểu (20% và tối đa 80%)
+    const minWidth = containerWidth * 0.2;
+    const maxWidth = containerWidth * 0.8;
+    
+    if (newLeftWidth >= minWidth && newLeftWidth <= maxWidth) {
+        const leftPercent = (newLeftWidth / containerWidth) * 100;
+        const rightPercent = 100 - leftPercent;
+        
+        $('#leftPanel').css('width', leftPercent + '%');
+        $('#rightPanel').css('width', rightPercent + '%');
+        $('#leftPanel').removeClass('col-lg-7 col-lg-6 col-lg-auto').addClass('col-lg-auto');
+        $('#rightPanel').removeClass('col-lg-5 col-lg-6 col-lg-auto').addClass('col-lg-auto');
+        
+        // Cập nhật vị trí resizer
+        $('#resizer').css('left', leftPercent + '%');
+    }
+    
+    e.preventDefault();
+});
+
+$(document).on('mouseup', function() {
+    if (isResizing) {
+        isResizing = false;
+        $('body').css('cursor', '');
+        $('body').css('user-select', '');
+    }
+});
+</script>
+
+{% endblock %}

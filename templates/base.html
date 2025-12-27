@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Hệ thống Hỏi đáp PDF{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .question-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+        .question-box h4 {
+            font-size: 1.5rem;
+        }
+        .question-box .form-label,
+        .question-box .form-control,
+        .question-box .form-select,
+        .question-box button,
+        .question-box p {
+            font-size: 1.1rem;
+        }
+        .answer-box {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-top: 1rem;
+            border-left: 5px solid #28a745;
+            font-size: 1.1rem;
+        }
+        .answer-box h4,
+        .answer-box h5 {
+            font-size: 1.4rem;
+        }
+        .answer-box #answerText {
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+        #loading {
+            font-size: 1.1rem;
+        }
+        #loading p {
+            font-size: 1.1rem;
+        }
+        .pdf-card {
+            transition: transform 0.3s ease;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+        .pdf-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        .source-link {
+            background: #e3f2fd;
+            border-radius: 10px;
+            padding: 1rem;
+            margin: 0.5rem 0;
+            transition: background 0.3s ease;
+            /* Cho phép tên file rất dài tự xuống dòng, không tràn ra ngoài */
+            white-space: normal;
+            word-wrap: break-word;
+            overflow-wrap: anywhere;
+        }
+        .navbar-brand {
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 25px;
+            padding: 0.75rem 2rem;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+            transform: translateY(-2px);
+        }
+        .btn-success {
+            border-radius: 25px;
+            padding: 0.75rem 2rem;
+        }
+        .btn-outline-secondary {
+            border-radius: 25px;
+            padding: 0.75rem 2rem;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        main {
+            flex: 1;
+        }
+        footer {
+            margin-top: auto;
+        }
+        footer p {
+            margin: 0;
+            padding: 0;
+        }
+        .navbar-brand {
+            font-size: 1.8rem;
+        }
+        .btn-search-hover {
+            transition: all 0.3s ease;
+        }
+        .btn-search-hover:hover {
+            background-color: #667eea !important;
+            color: white !important;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        #resizer {
+            transition: background 0.2s;
+        }
+        #resizer:hover {
+            background: #999;
+        }
+        #resizer:active {
+            background: #667eea;
+        }
+        #fileListCard {
+            width: 100%;
+            box-sizing: border-box;
+            margin: 0;
+        }
+        #fileListCard .card-body {
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 1rem;
+            box-sizing: border-box;
+            margin: 0;
+        }
+        #fileListCard .card-body::-webkit-scrollbar {
+            width: 8px;
+        }
+        #fileListCard .card-body::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+        #fileListCard .card-body::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        #fileListCard .card-body::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        #fileListBody {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            align-items: start;
+            width: 100%;
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        #fileListBody .pdf-card {
+            margin-bottom: 0 !important;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        #fileListBody .pdf-card .card-body {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        #fileListBody .pdf-card .card-body > *:last-child {
+            margin-top: auto;
+        }
+        #fileListBody .btn-group {
+            border-radius: 0.375rem;
+            overflow: hidden;
+        }
+        #fileListBody .btn-group .btn {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+            border-radius: 0;
+        }
+        #fileListBody .btn-group .btn:first-child {
+            border-top-left-radius: 0.375rem;
+            border-bottom-left-radius: 0.375rem;
+        }
+        #fileListBody .btn-group .btn:last-child {
+            border-top-right-radius: 0.375rem;
+            border-bottom-right-radius: 0.375rem;
+        }
+        #recentFiles, #allFiles {
+            display: contents;
+        }
+        /* Màu gradient cho phần Tin tức */
+        #fileListCard .card-header.bg-primary,
+        #pdfViewerPanel .card-header.bg-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        }
+        /* Màu gradient cho trang Đăng nhập Admin - giống Hỏi đáp tài liệu */
+        .card-header.bg-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+        }
+        /* Panel trái (Hỏi đáp về tài liệu) cuộn bên trong, không kéo cả trang */
+        #leftPanel {
+            max-height: calc(100vh - 160px);
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="fas fa-file-pdf"></i> PDF Q&A System
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index') }}">
+                            <i class="fas fa-home"></i> Trang chủ
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('admin_login') }}">
+                            <i class="fas fa-cog"></i> Admin
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container-fluid mt-2 px-3">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="bg-dark text-light py-2">
+        <div class="container text-center">
+            <p class="mb-0">&copy; 2025 PDF Q&A System.</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        $(document).ready(function() {
+            $('.alert').each(function() {
+                const alert = $(this);
+                const category = alert.attr('class').match(/alert-(\w+)/);
+                
+                // Ẩn tự động: success/info/Vui lòng đăng nhập" (0.7s)
+                const text = alert.text().trim();
+                if (text.includes('Vui lòng đăng nhập')) {
+                    setTimeout(function() {
+                        alert.fadeOut('slow', function() { $(this).remove(); });
+                    }, 700);
+                } else if (category && (category[1] === 'success' || category[1] === 'info')) {
+                    setTimeout(function() {
+                        alert.fadeOut('slow', function() { $(this).remove(); });
+                    }, 700);
+                }
+            });
+        });
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

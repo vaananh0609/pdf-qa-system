@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+
+{% block title %}{{ metadata.filename }} - Xem PDF{% endblock %}
+
+{% block content %}
+<style>
+    .pdf-header {
+        gap: 1rem;
+    }
+    .pdf-header-title {
+        min-width: 0;
+    }
+    .pdf-header-title h2 {
+        margin: 0;
+        font-size: 1.75rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        width: 100%;
+    }
+    .pdf-header-actions {
+        flex-shrink: 0;
+    }
+    @media (max-width: 576px) {
+        .pdf-header-actions {
+            width: 100%;
+        }
+        .pdf-header-actions .btn {
+            width: 100%;
+        }
+    }
+</style>
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between mb-4 pdf-header">
+            <div class="d-flex align-items-center gap-2 flex-grow-1 pdf-header-title">
+                <i class="fas fa-file-pdf text-danger fa-2x"></i>
+                <h2 class="text-truncate">{{ metadata.filename }}</h2>
+            </div>
+            <div class="d-flex flex-column flex-sm-row gap-2 pdf-header-actions">
+                <button onclick="openPdfModal('{{ url_for('view_pdf_file', filename=metadata.filename) }}', '{{ metadata.filename }}')" 
+                        class="btn btn-primary">
+                    <i class="fas fa-eye"></i> Xem PDF
+                </button>
+                <a href="{{ url_for('download_pdf', filename=metadata.filename) }}" 
+                   class="btn btn-success">
+                    <i class="fas fa-download"></i> Tải xuống
+                </a>
+                {% if from_admin %}
+                <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Quay lại Admin
+                </a>
+                {% else %}
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Quay lại
+                </a>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Thông tin file -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5><i class="fas fa-info-circle"></i> Thông tin tài liệu</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <strong>Kích thước:</strong><br>
+                        {{ "%.1f"|format(metadata.file_size / 1024 / 1024) }} MB
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Loại PDF:</strong><br>
+                        {% if metadata.file_type == 'scanned' %}
+                            <span class="badge bg-success">PDF Scanned (Ảnh)</span>
+                        {% elif metadata.file_type == 'mixed' %}
+                            <span class="badge bg-warning text-dark">PDF Mixed (Text + Ảnh)</span>
+                        {% elif metadata.file_type == 'text' %}
+                            <span class="badge bg-primary">PDF Text</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Chưa xác định</span>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Số trang/chunks:</strong><br>
+                        {{ metadata.total_chunks }}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Ngày tạo:</strong><br>
+                        {{ metadata.created_at.strftime('%d/%m/%Y %H:%M') }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Nội dung PDF -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-book-open"></i> Nội dung tài liệu</h5>
+                <div>
+                    <input type="text" id="searchText" class="form-control form-control-sm" 
+                           placeholder="Tìm kiếm trong nội dung..." style="width: 300px;">
+                </div>
+            </div>
+            <div class="card-body">
+                {% if chunks %}
+                    {% for chunk in chunks %}
+                    <div class="chunk-content mb-4 p-3 border rounded" 
+                         id="chunk-{{ chunk.chunk_id }}"
+                         data-page="{{ chunk.page_number }}"
+                         data-index="{{ chunk.chunk_index }}">
+                        <div class="chunk-header d-flex justify-content-between align-items-center mb-2">
+                            {% if chunk.chunk_type == 'image' %}
+                            <span class="badge bg-success">
+                                <i class="fas fa-image"></i> Trang {{ chunk.page_number }} - Ảnh (PDF Scanned)
+                            </span>
+                            {% else %}
+                            <span class="badge bg-primary">
+                                <i class="fas fa-file-alt"></i> Trang {{ chunk.page_number }} - Đoạn {{ chunk.chunk_index + 1 }}
+                            </span>
+                            {% if chunk.char_start is defined and chunk.char_end is defined %}
+                            <small class="text-muted">
+                                Ký tự {{ "{:,}".format(chunk.char_start) }} - {{ "{:,}".format(chunk.char_end) }}
+                            </small>
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                        <div class="chunk-text">
+                            {% if chunk.chunk_type == 'image' and chunk.image_url %}
+                                <!-- Hiển thị ảnh cho PDF scanned -->
+                                <div class="text-center">
+                                    <img src="{{ chunk.image_url }}" 
+                                         alt="Trang {{ chunk.page_number }}" 
+                                         class="img-fluid border rounded shadow-sm"
+                                         style="max-width: 100%; height: auto; cursor: pointer;"
+                                         onclick="openImageModal('{{ chunk.image_url }}', {{ chunk.page_number }})">
+                                    <p class="text-muted mt-2">
+                                        <small>Click vào ảnh để phóng to</small>
+                                    </p>
+                                </div>
+                            {% else %}
+                                <!-- Hiển thị text cho PDF thường -->
+                                {{ chunk.text }}
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center text-muted py-5">
+                        <i class="fas fa-file-pdf fa-3x mb-3"></i>
+                        <p>Không có nội dung để hiển thị</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal hiển thị kết quả tìm kiếm -->
+<div class="modal fade" id="searchModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Kết quả tìm kiếm</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="searchResults">
+                <!-- Kết quả tìm kiếm sẽ được hiển thị ở đây -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal phóng to ảnh -->
+<div class="modal fade" id="imageModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="imageModalTitle">Xem ảnh</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center" style="max-height: 80vh; overflow: auto;">
+                <img id="modalImage" src="" alt="PDF Page" class="img-fluid">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <a id="downloadImageBtn" href="" download class="btn btn-primary">
+                    <i class="fas fa-download"></i> Tải ảnh
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // Tìm kiếm trong nội dung
+    $('#searchText').on('input', function() {
+        const searchTerm = $(this).val().toLowerCase();
+        
+        if (searchTerm.length < 2) {
+            $('.chunk-content').show();
+            $('.chunk-text').removeClass('highlight');
+            return;
+        }
+        
+        let foundResults = [];
+        
+        $('.chunk-content').each(function() {
+            const chunkText = $(this).find('.chunk-text').text().toLowerCase();
+            
+            if (chunkText.includes(searchTerm)) {
+                $(this).show();
+                
+                // Highlight text
+                const originalText = $(this).find('.chunk-text').text();
+                const highlightedText = originalText.replace(
+                    new RegExp(searchTerm, 'gi'),
+                    '<mark>$&</mark>'
+                );
+                $(this).find('.chunk-text').html(highlightedText);
+                
+                foundResults.push({
+                    page: $(this).data('page'),
+                    index: $(this).data('index'),
+                    text: originalText.substring(0, 200) + '...'
+                });
+            } else {
+                $(this).hide();
+            }
+        });
+        
+        // Hiển thị kết quả tìm kiếm
+        if (foundResults.length > 0) {
+            $('#searchResults').html(`
+                <p>Tìm thấy ${foundResults.length} kết quả:</p>
+                <div class="list-group">
+                    ${foundResults.map(result => `
+                        <div class="list-group-item" onclick="scrollToChunk(${result.page}, ${result.index})">
+                            <strong>Trang ${result.page} - Đoạn ${result.index + 1}</strong><br>
+                            <small>${result.text}</small>
+                        </div>
+                    `).join('')}
+                </div>
+            `);
+            $('#searchModal').modal('show');
+        }
+    });
+    
+    // Xử lý click từ trang chủ
+    const urlParams = new URLSearchParams(window.location.search);
+    const highlightChunk = urlParams.get('highlight');
+    if (highlightChunk) {
+        setTimeout(() => {
+            scrollToChunkById(highlightChunk);
+        }, 1000);
+    }
+});
+
+function scrollToChunk(page, index) {
+    const chunk = $(`.chunk-content[data-page="${page}"][data-index="${index}"]`);
+    if (chunk.length) {
+        chunk[0].scrollIntoView({ behavior: 'smooth' });
+        chunk.css('background-color', '#fff3cd');
+        setTimeout(() => {
+            chunk.css('background-color', '');
+        }, 3000);
+    }
+    $('#searchModal').modal('hide');
+}
+
+function scrollToChunkById(chunkId) {
+    const chunk = $(`#chunk-${chunkId}`);
+    if (chunk.length) {
+        chunk[0].scrollIntoView({ behavior: 'smooth' });
+        chunk.css('background-color', '#fff3cd');
+        setTimeout(() => {
+            chunk.css('background-color', '');
+        }, 3000);
+    }
+}
+
+function openImageModal(imageUrl, pageNumber) {
+    $('#imageModalTitle').text('Trang ' + pageNumber + ' - PDF Scanned');
+    $('#modalImage').attr('src', imageUrl);
+    $('#downloadImageBtn').attr('href', imageUrl);
+    $('#imageModal').modal('show');
+}
+
+// Hàm mở modal PDF
+function openPdfModal(pdfUrl, filename) {
+    $('#pdfModalFilename').text(filename);
+    $('#pdfModalDownload').attr('href', pdfUrl.replace('/view_pdf_file/', '/download/'));
+    $('#pdfModalFrame').attr('src', pdfUrl);
+    $('#pdfModal').modal('show');
+}
+</script>
+
+<!-- Modal hiển thị PDF -->
+<div class="modal fade" id="pdfModal" tabindex="-1" aria-labelledby="pdfModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="pdfModalLabel">
+                    <i class="fas fa-file-pdf"></i> <span id="pdfModalFilename"></span>
+                </h5>
+                <div>
+                    <a id="pdfModalDownload" href="#" class="btn btn-light btn-sm me-2" download>
+                        <i class="fas fa-download"></i> Tải xuống
+                    </a>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body p-0" style="height: calc(100vh - 120px);">
+                <iframe id="pdfModalFrame" src="" style="width: 100%; height: 100%; border: none;"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Đóng modal khi click outside và giải phóng bộ nhớ
+$('#pdfModal').on('hidden.bs.modal', function () {
+    $('#pdfModalFrame').attr('src', ''); // Xóa src để giải phóng bộ nhớ
+});
+</script>
+{% endblock %}
